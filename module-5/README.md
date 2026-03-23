@@ -27,8 +27,9 @@ The loop:
 trainer = GRPOTrainer(
     model=model_name,
     reward_funcs=[reward_correct, reward_greens, reward_yellows],
-    rollout_func=rollout_func,  # Your environment interaction
-    ...
+    rollout_func=rollout_func,   # Your environment interaction
+    train_dataset=dataset,
+    args=grpo_config,
 )
 trainer.train()
 ```

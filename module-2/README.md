@@ -18,23 +18,25 @@ You don't build environments to use them. Install the client, point it at a serv
 
 Every OpenEnv environment defines typed models for actions, observations, and state. These aren't just documentation — they're real Python dataclasses that your IDE can autocomplete and your type checker can validate.
 
-For OpenSpiel environments:
+For OpenSpiel environments (Pydantic models — `done` and `reward` are inherited from `Observation`):
 
 ```python
-@dataclass
-class OpenSpielAction(Action):
-    action_id: int           # Which action to take
-    game_name: str           # Which game
-    game_params: Dict        # Game configuration
+from openenv.core.env_server import Action, Observation, State
+from pydantic import Field
+from typing import Any, Dict, List, Optional
 
-@dataclass
+class OpenSpielAction(Action):
+    action_id: int                              # Which action to take
+    game_name: str = "catch"                   # Which game
+    game_params: Dict[str, Any] = Field(default_factory=dict)  # Game config
+
 class OpenSpielObservation(Observation):
-    done: bool               # Is the episode over?
-    reward: Optional[float]  # Reward signal
-    info_state: List[float]  # Game state as a vector
-    legal_actions: List[int] # Valid actions this step
-    game_phase: str          # Current phase
-    current_player_id: int   # Whose turn
+    # done: bool and reward: Optional[float] are inherited from Observation
+    info_state: List[float]      # Game state as a vector
+    legal_actions: List[int]     # Valid actions this step
+    game_phase: str = "playing"  # Current phase
+    current_player_id: int = 0   # Whose turn
+    opponent_last_action: Optional[int] = None
 ```
 
 No more guessing what `obs[0][3]` means.

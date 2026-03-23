@@ -23,32 +23,29 @@ You'll build all of these for a word-guessing game. ~100 lines of meaningful cod
 Start with the data contracts. What does an action look like? What does an observation contain?
 
 ```python
-from dataclasses import dataclass, field
 from typing import List, Optional
 from openenv.core.env_server import Action, Observation, State
 
-@dataclass
+# Action, Observation, State are Pydantic BaseModel subclasses —
+# no @dataclass decorator needed; define fields directly as class attributes.
+
 class WordGameAction(Action):
     guess: str  # The player's guessed letter
 
-@dataclass
 class WordGameObservation(Observation):
-    done: bool
-    reward: Optional[float]
+    # done: bool and reward: Optional[float] are already in Observation base
     masked_word: str           # e.g., "h_ll_"
     guessed_letters: List[str] # Letters tried so far
     attempts_remaining: int
     message: str               # Feedback message
 
-@dataclass
 class WordGameState(State):
-    episode_id: Optional[str] = None
-    step_count: int = 0
+    # episode_id: Optional[str] and step_count: int are already in State base
     target_word: str = ""
-    max_attempts: int = 6
+    max_attempts: int = 10
 ```
 
-These dataclasses do three things:
+These Pydantic models do three things:
 1. **Document the API** — anyone reading `models.py` knows the interface
 2. **Enable IDE autocomplete** — `obs.masked_word` instead of `obs["masked_word"]`
 3. **Catch bugs at type-check time** — misspell a field name and your linter tells you
@@ -61,27 +58,31 @@ The environment implements `reset()`, `step()`, and `state`. This is where your 
 import random
 import uuid
 from openenv.core.env_server import Environment
-from models import WordGameAction, WordGameObservation, WordGameState
+from .models import WordGameAction, WordGameObservation, WordGameState
 
 WORDS = ["python", "neural", "tensor", "matrix", "vector",
          "kernel", "lambda", "signal", "binary", "cipher"]
 
 class WordGameEnvironment(Environment):
+    SUPPORTS_CONCURRENT_SESSIONS = True  # Allow multiple simultaneous clients
+
+    MAX_ATTEMPTS = 10
+
     def __init__(self):
         self._state = WordGameState()
         self._target = ""
         self._guessed = set()
-        self._remaining = 6
+        self._remaining = self.MAX_ATTEMPTS
 
-    def reset(self) -> WordGameObservation:
+    def reset(self, seed=None, episode_id=None, **kwargs) -> WordGameObservation:
         self._target = random.choice(WORDS)
         self._guessed = set()
-        self._remaining = 6
+        self._remaining = self.MAX_ATTEMPTS
         self._state = WordGameState(
-            episode_id=str(uuid.uuid4()),
+            episode_id=episode_id or str(uuid.uuid4()),
             step_count=0,
             target_word=self._target,
-            max_attempts=6,
+            max_attempts=self.MAX_ATTEMPTS,
         )
         return WordGameObservation(
             done=False,
@@ -92,7 +93,7 @@ class WordGameEnvironment(Environment):
             message=f"Guess letters in a {len(self._target)}-letter word!",
         )
 
-    def step(self, action: WordGameAction) -> WordGameObservation:
+    def step(self, action: WordGameAction, timeout_s=None, **kwargs) -> WordGameObservation:
         letter = action.guess.lower().strip()
         self._state.step_count += 1
         self._guessed.add(letter)
@@ -137,39 +138,42 @@ class WordGameEnvironment(Environment):
 
 ## Step 3: Create the Client (`client.py`)
 
-The client translates between your typed models and the HTTP/WebSocket wire format. Three methods:
+The client translates between your typed models and the WebSocket wire format. Three abstract methods to implement:
 
 ```python
-from openenv.core.http_env_client import HTTPEnvClient
-from openenv.core.types import StepResult
-from models import WordGameAction, WordGameObservation, WordGameState
+from openenv.core.env_client import EnvClient
+from openenv.core.client_types import StepResult
+from .models import WordGameAction, WordGameObservation, WordGameState
 
-class WordGameEnv(HTTPEnvClient[WordGameAction, WordGameObservation]):
+class WordGameEnv(EnvClient[WordGameAction, WordGameObservation, WordGameState]):
     def _step_payload(self, action: WordGameAction) -> dict:
         return {"guess": action.guess}
 
     def _parse_result(self, payload: dict) -> StepResult:
+        obs_data = payload.get("observation", {})
         return StepResult(
             observation=WordGameObservation(
-                done=payload["done"],
+                done=payload.get("done", False),
                 reward=payload.get("reward"),
-                masked_word=payload["masked_word"],
-                guessed_letters=payload["guessed_letters"],
-                attempts_remaining=payload["attempts_remaining"],
-                message=payload["message"],
+                masked_word=obs_data.get("masked_word", ""),
+                guessed_letters=obs_data.get("guessed_letters", []),
+                attempts_remaining=obs_data.get("attempts_remaining", 0),
+                message=obs_data.get("message", ""),
             ),
-            reward=payload.get("reward", 0),
-            done=payload["done"],
+            reward=payload.get("reward"),
+            done=payload.get("done", False),
         )
 
     def _parse_state(self, payload: dict) -> WordGameState:
         return WordGameState(
             episode_id=payload.get("episode_id"),
             step_count=payload.get("step_count", 0),
+            target_word=payload.get("target_word", ""),
+            max_attempts=payload.get("max_attempts", 6),
         )
 ```
 
-That's it. The base class handles all WebSocket/HTTP communication.
+That's it. The `EnvClient` base class handles all WebSocket communication.
 
 ## Step 4: Wire Up FastAPI (`server/app.py`)
 

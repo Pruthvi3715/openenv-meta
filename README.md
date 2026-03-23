@@ -31,19 +31,38 @@ Each module has two parts:
 ## Quick Start
 
 ```bash
+# Install OpenEnv core
 pip install openenv-core
+
+# Clone the OpenEnv repo to get typed environment clients
+git clone https://github.com/meta-pytorch/OpenEnv.git
 ```
 
 ```python
-from envs.echo_env import EchoEnv, EchoAction
+import sys, os
+repo = os.path.abspath('OpenEnv')
+sys.path.insert(0, repo)
+sys.path.insert(0, os.path.join(repo, 'src'))
+
+# Echo environment — uses MCP tool-calling interface
+from envs.echo_env import EchoEnv
 
 with EchoEnv(base_url="https://openenv-echo-env.hf.space").sync() as env:
+    env.reset()
+    response = env.call_tool("echo_message", message="Hello, OpenEnv!")
+    print(response)  # Hello, OpenEnv!
+
+# OpenSpiel environments — use standard reset/step interface
+from envs.openspiel_env import OpenSpielEnv
+from envs.openspiel_env.models import OpenSpielAction
+
+with OpenSpielEnv(base_url="https://openenv-openspiel-catch.hf.space").sync() as env:
     result = env.reset()
-    result = env.step(EchoAction(message="Hello, OpenEnv!"))
-    print(result.observation)
+    result = env.step(OpenSpielAction(action_id=1, game_name="catch"))
+    print(result.observation.legal_actions)
 ```
 
-That's it. Every OpenEnv environment uses the same 3-method interface: `reset()`, `step()`, `state()`.
+Every standard OpenEnv environment uses the same 3-method interface: `reset()`, `step()`, `state()`.
 
 ## Links
 

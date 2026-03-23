@@ -115,13 +115,17 @@ class Environment(ABC):
 
 **Client side** (your training code):
 ```python
-class HTTPEnvClient(ABC):
-    def reset(self) -> StepResult: ...
-    def step(self, action) -> StepResult: ...
-    def state(self) -> State: ...
+class EnvClient(ABC):
+    async def reset(self, **kwargs) -> StepResult: ...
+    async def step(self, action) -> StepResult: ...
+    async def state(self) -> State: ...
+    def sync(self) -> SyncEnvClient: ...  # Sync wrapper for notebooks/scripts
 ```
 
 Same interface on both sides. Communication via WebSocket. You focus on RL.
+
+For simple MCP-based environments (like the Echo environment), the interface is
+tool-based instead: `env.list_tools()` and `env.call_tool(name, **kwargs)`.
 
 ## What's Next
 

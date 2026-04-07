@@ -24,6 +24,8 @@ class BankReconciliationEnv:
         self._state = State()
         self._transactions: List[Transaction] = []
         self._resolved: dict = {}
+        self._last_reward = 0.0
+        self._last_done = False
 
     def reset(
         self,
@@ -185,6 +187,9 @@ class BankReconciliationEnv:
             reward_value += 2.0
             reward_breakdown["completion_bonus"] = 2.0
 
+        self._last_reward = reward_value
+        self._last_done = done
+
         batch = self._get_batch()
         context_hints = get_context_hints(self._transactions)
 
@@ -193,6 +198,8 @@ class BankReconciliationEnv:
             resolved_count=len(self._resolved),
             episode_step=self._state.step_count,
             context_hints=context_hints,
+            reward=reward_value,
+            done=done,
         )
 
     def _get_parent_category(self, category: str) -> str:

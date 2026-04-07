@@ -103,8 +103,8 @@ async def step(input_data: StepInput):
 
     return {
         "observation": obs.model_dump(),
-        "done": obs.transactions == []
-        and obs.resolved_count >= len(current_task.state.all_transactions),
+        "reward": obs.reward,
+        "done": obs.done,
     }
 
 

@@ -2,6 +2,9 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from pydantic import BaseModel
 
+from openenv.core.env_server import Action as BaseAction
+from openenv.core.env_server import Observation as BaseObservation
+
 
 class Transaction(BaseModel):
     id: str
@@ -12,14 +15,14 @@ class Transaction(BaseModel):
     account_type: str
 
 
-class Observation(BaseModel):
+class Observation(BaseObservation):
     transactions: List[Transaction]
     resolved_count: int
     episode_step: int
     context_hints: Dict[str, str]
 
 
-class Action(BaseModel):
+class Action(BaseAction):
     transaction_id: str
     assigned_category: str
     merchant_label: str

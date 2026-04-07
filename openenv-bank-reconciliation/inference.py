@@ -1,5 +1,6 @@
 import os
-from typing import Dict, Any
+import json
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -51,6 +52,27 @@ Analyze each transaction carefully and return ONLY a valid JSON object with your
 Do NOT wrap it in markdown code fences. Return raw JSON only."""
 
 
+def log_start(task: str, env: str, model: str):
+    print(f"[START] task={task} env={env} model={model}", flush=True)
+
+
+def log_step(
+    step: int, action: str, reward: float, done: bool, error: Optional[str] = None
+):
+    print(
+        f"[STEP] step={step} action={action} reward={reward:.2f} done={str(done).lower()} error={error or 'null'}",
+        flush=True,
+    )
+
+
+def log_end(success: bool, steps: int, score: float, rewards: List[float]):
+    rewards_str = ",".join(f"{r:.2f}" for r in rewards)
+    print(
+        f"[END] success={str(success).lower()} steps={steps} score={score:.2f} rewards={rewards_str}",
+        flush=True,
+    )
+
+
 def get_action_from_llm(
     transactions: list, context_hints: Dict[str, str], step: int
 ) -> Action:
@@ -79,8 +101,6 @@ Return a JSON object with your action. Only JSON, no markdown:"""
         temperature=0.0,
     )
 
-    import json
-
     content = response.choices[0].message.content
     content = content.strip()
     if content.startswith("```json"):
@@ -100,7 +120,7 @@ Return a JSON object with your action. Only JSON, no markdown:"""
 
 
 def run_task(task_name: str, seed: int = 42) -> Dict[str, Any]:
-    print(f"[START] {task_name}")
+    log_start(task=task_name, env="bank-reconciliation", model=MODEL_NAME)
 
     env = BankReconciliationEnv(seed=seed)
 
@@ -115,14 +135,15 @@ def run_task(task_name: str, seed: int = 42) -> Dict[str, Any]:
 
     step_count = 0
     max_steps = 60
+    rewards_list: List[float] = []
+    last_action_str = "null"
+    last_error = None
 
     import time
 
     while step_count < max_steps:
         if not obs.transactions:
             break
-
-        print(f"[STEP] {step_count}")
 
         time.sleep(4)
 
@@ -132,11 +153,11 @@ def run_task(task_name: str, seed: int = 42) -> Dict[str, Any]:
                 obs.context_hints,
                 step_count,
             )
+            last_action_str = f"{action.transaction_id}:{action.assigned_category}:{action.merchant_label}:{action.flag_type}"
             obs = env.step(action)
         except Exception as e:
-            print(f"  Step {step_count} error: {e}")
+            last_error = str(e)
             if "429" in str(e):
-                print("  Rate limited! Waiting 15 seconds before retry...")
                 time.sleep(15)
                 continue
 
@@ -147,20 +168,39 @@ def run_task(task_name: str, seed: int = 42) -> Dict[str, Any]:
                     merchant_label=obs.transactions[0].merchant_raw,
                     flag_type=None,
                 )
+                last_action_str = f"{fallback.transaction_id}:{fallback.assigned_category}:{fallback.merchant_label}:{fallback.flag_type}"
                 obs = env.step(fallback)
 
+        reward = obs.reward if obs.reward is not None else 0.0
+        done = obs.done if obs.done is not None else False
+        rewards_list.append(reward)
+
+        log_step(
+            step=step_count,
+            action=last_action_str,
+            reward=reward,
+            done=done,
+            error=last_error,
+        )
+
         step_count += 1
+        last_error = None
 
         if len(env.state.resolved_transactions) >= len(env.state.all_transactions):
             break
 
     score = grade_task(task_name, env.state.resolved_transactions, env.state)
+    if isinstance(score, dict):
+        score = score.get("score", 0.0)
+    score_float = float(score)
 
-    print(f"[END] {task_name}")
+    success = score_float >= 0.5
+
+    log_end(success=success, steps=step_count, score=score_float, rewards=rewards_list)
 
     return {
         "task": task_name,
-        "score": score,
+        "score": score_float,
         "steps": step_count,
         "resolved": len(env.state.resolved_transactions),
         "total": len(env.state.all_transactions),
@@ -169,29 +209,14 @@ def run_task(task_name: str, seed: int = 42) -> Dict[str, Any]:
 
 
 def run_all_tasks() -> Dict[str, Any]:
-    print(f"Using model: {MODEL_NAME}")
-    print(f"Base URL: {client.base_url}\n")
-
     results = {}
 
     results["categorize"] = run_task("categorize", seed=42)
-    print(f"Task 1 (categorize): {results['categorize']['score']}")
-
     results["decode_upi"] = run_task("decode_upi", seed=42)
-    print(f"Task 2 (decode_upi): {results['decode_upi']['score']}")
-
     results["full_reconciliation"] = run_task("full_reconciliation", seed=42)
-    print(f"Task 3 (full_reconciliation): {results['full_reconciliation']['score']}")
 
     return results
 
 
 if __name__ == "__main__":
     results = run_all_tasks()
-    print("\n=== FINAL RESULTS ===")
-    for task, result in results.items():
-        print(
-            f"{task}: score={result['score']}, "
-            f"resolved={result['resolved']}/{result['total']}, "
-            f"steps={result['steps']}"
-        )

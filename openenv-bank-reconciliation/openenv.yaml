@@ -16,5 +16,5 @@ observation_space:
   - episode_step
   - context_hints
 reward_range:
-  min: -0.3
-  max: 1.0
+  min: -0.5
+  max: 4.0

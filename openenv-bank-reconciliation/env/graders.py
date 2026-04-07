@@ -76,20 +76,11 @@ def grade_task3(resolved: Dict[str, dict], state: State) -> float:
 
     anomaly_score = flagged_anomalies / 2 if state.anomalies else 1.0
 
-    final_score = 0.4 * category_score + 0.3 * duplicate_score + 0.3 * anomaly_score
+    final_score = round(
+        0.4 * category_score + 0.3 * duplicate_score + 0.3 * anomaly_score, 4
+    )
 
-    return {
-        "score": final_score,
-        "category_score": category_score,
-        "duplicate_score": duplicate_score,
-        "anomaly_score": anomaly_score,
-        "correct_categories": correct_categories,
-        "total_transactions": total,
-        "flagged_duplicates": flagged_duplicates,
-        "total_duplicates": len(state.duplicates),
-        "flagged_anomalies": flagged_anomalies,
-        "total_anomalies": len(state.anomalies),
-    }
+    return final_score
 
 
 def grade_task(task_name: str, resolved: Dict[str, dict], state: State) -> Any:

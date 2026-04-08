@@ -14,7 +14,7 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 API_BASE_URL = os.getenv(
     "API_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"
 )
-MODEL_NAME = os.getenv("MODEL_NAME", "gemini-1.5-flash")
+MODEL_NAME = os.getenv("MODEL_NAME", "gemini-2.5-flash")
 HF_TOKEN = os.getenv("HF_TOKEN", "")
 
 client = OpenAI(
